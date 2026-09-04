@@ -1,0 +1,15 @@
+{
+  "name": "overclaude",
+  "version": "1.0.0",
+  "description": "macOS menu bar app that shows claude.ai Pro/Max session (5h) and weekly (7d) usage utilization.",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "^32.0.0"
+  }
+}
