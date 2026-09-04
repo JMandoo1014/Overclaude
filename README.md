@@ -11,20 +11,39 @@ npm start
 ```
 
 최초 실행 시 로그인 창이 뜹니다. `claude.ai`에 로그인하면 창이 자동으로 닫히고,
-메뉴바에 사용률 아이콘이 나타납니다.
+메뉴바에 게이지 모양 아이콘이 나타납니다.
+
+## 사용법 (좌클릭 / 우클릭)
+
+- **아이콘 자체** — 텍스트 없이, 5시간 사용률만큼 채워지는 원형 게이지입니다.
+  - 50% 미만: 초록 / 50~79%: 주황 / 80% 이상: 빨강
+  - 로딩 중(최초 1회): 회색 점선 링
+  - 로그인 필요 / 오류: 깨진 링 + 느낌표 모양
+  - 아이콘에 마우스를 올리면(hover) 툴팁으로 요약 수치가 뜹니다.
+- **좌클릭** — 화면 모서리의 사용량 오버레이 패널을 열고/닫습니다 (토글).
+- **우클릭** — 새로고침 / 재로그인 / 패널 위치 변경 / 종료 메뉴를 띄웁니다.
 
 ## 동작 방식
 
-- `main.js` — Electron 메인 프로세스. Tray/Menu 생성, 60초 폴링, 에러 상태 반영을 담당합니다.
+- `main.js` — Electron 메인 프로세스. Tray 아이콘 갱신, 60초 폴링, 좌/우클릭 핸들러,
+  오버레이 연동을 담당합니다. (더 이상 `tray.setTitle()`로 텍스트를 붙이지 않습니다.)
+- `src/icon.js` — `@napi-rs/canvas`로 매 폴링마다 원형 게이지 PNG를 런타임에 그려
+  `nativeImage.createFromBuffer()`로 트레이 아이콘을 교체합니다. 정적 이미지를 미리
+  만들어두지 않습니다.
+- `src/overlay.js` + `renderer/overlay.html` — 화면 모서리에 뜨는 작은 사용량 HUD
+  패널입니다. `frame:false / transparent:true / alwaysOnTop:true / focusable:false`
+  로 구성해 클릭해도 다른 앱의 포커스를 뺏지 않습니다. macOS
+  `vibrancy: 'popover'`로 반투명 블러 배경을 쓰며, 라이트/다크 모드에 따라 자동으로
+  전환됩니다 (`vibrancy: 'hud'`는 시스템 설정과 무관하게 항상 어두운 패널이라 이
+  용도에는 맞지 않아 `'popover'`를 사용했습니다).
 - `src/login.js` — 별도 세션 파티션(`persist:overclaude`)의 `BrowserWindow`로 로그인 페이지를
   띄우고, 로그인 완료(비로그인/가입/oauth 경로가 아닌 `claude.ai` URL로 이동)를 감지해
   세션 쿠키를 수집합니다.
 - `src/store.js` — Electron `safeStorage`(macOS 키체인 기반)로 쿠키를 암호화해
-  `app.getPath('userData')` 아래에만 저장합니다. 조직 uuid 캐시도 이 모듈에서 관리합니다.
+  `app.getPath('userData')` 아래에만 저장합니다. 조직 uuid, 오버레이 패널 위치/표시
+  여부도 이 모듈에서 관리합니다.
 - `src/api.js` — 조직 목록과 사용량을 조회합니다. 401/403 응답은 `ApiError('AUTH_EXPIRED')`로
   구분해서 던지고, 그 외 응답 필드는 전부 optional chaining으로 방어적으로 읽습니다.
-- `assets/trayTemplate.png`, `assets/trayTemplate@2x.png` — macOS 템플릿 이미지 규칙을
-  따르는 단색(검정+알파) 트레이 아이콘입니다.
 
 ## ⚠️ 중요: 비공식 API 사용에 대한 주의사항
 
@@ -53,14 +72,22 @@ Anthropic이 언제든 이 엔드포인트의 경로, 인증 방식, 응답 스�
   공유하는 환경이라면 사용 후 `~/Library/Application Support/overclaude/` 안의
   암호화된 세션 파일을 삭제해 로그아웃 상태로 되돌릴 수 있습니다.
 
-## 트레이 표시 규칙
+## 트레이 아이콘 & 오버레이 패널
 
-- 타이틀: `🟢/🟠/🔴 + 5시간 사용률%`
-  - 50% 미만: 🟢
-  - 50~80%: 🟠
-  - 80% 이상: 🔴
-  - 오류 상태: ⚠️
-- 드롭다운 메뉴: 5시간/주간 사용률, 각 리셋 시각, 지금 새로고침, 재로그인, 종료
+- 아이콘은 5시간 사용률에 따라 12시 방향에서 시계방향으로 채워지는 원형 게이지입니다.
+  - 50% 미만: 초록 (`src/icon.js`의 `COLOR_LOW`)
+  - 50~79%: 주황 (`COLOR_MID`)
+  - 80% 이상: 빨강 (`COLOR_HIGH`)
+  - 로딩(최초 1회): 회색 점선 링 (`renderLoadingIcon`)
+  - 로그인 필요 / 오류: 깨진 링 + 느낌표 (`renderErrorIcon`)
+  - 색 임계치를 바꾸려면 `src/icon.js`의 `colorForPercent()`를 수정하세요.
+- 좌클릭으로 여는 오버레이 패널에 5시간/주간 사용률 바(bar)와 리셋까지 남은 시간이
+  표시됩니다. 우클릭 메뉴의 "패널 위치"에서 왼쪽 상단/오른쪽 상단을 전환할 수 있고,
+  선택한 위치와 패널 표시 여부는 `overclaude-settings.json`에 저장되어 재실행 후에도
+  유지됩니다 (`~/Library/Application Support/overclaude/overclaude-settings.json`,
+  `src/store.js`의 `savePanelPosition`/`savePanelVisible`).
+- 우클릭 메뉴는 지금 새로고침 / 재로그인 / 패널 위치 / 종료, 즉 순수 액션만 담고
+  있습니다 — 사용량 숫자는 오버레이 패널이 보여줍니다.
 
 ## 응답 스키마가 바뀌었을 때 확인/수정 방법
 

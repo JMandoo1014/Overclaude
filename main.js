@@ -1,9 +1,10 @@
 'use strict';
 
-const path = require('path');
-const { app, Tray, Menu, nativeImage, shell } = require('electron');
+const { app, Tray, Menu, nativeImage } = require('electron');
 
 const store = require('./src/store');
+const overlay = require('./src/overlay');
+const icon = require('./src/icon');
 const { collectLoginCookies } = require('./src/login');
 const { fetchOrganizations, fetchUsage, ApiError } = require('./src/api');
 
@@ -13,18 +14,19 @@ let tray = null;
 let pollTimer = null;
 let cookieHeader = null;
 let orgUuid = null;
-let orgName = null;
 let latestUsage = null; // { fiveHour, sevenDay }
-let lastError = null; // string | null
 let isRefreshing = false;
+let panelPosition = 'top-right';
 
-function trayIconPath() {
-  return path.join(__dirname, 'assets', 'trayTemplate.png');
-}
+// status: 'loading' | 'ok' | 'error' | 'auth_required'
+const state = { status: 'loading', errorMessage: null };
 
-function loadTrayIcon() {
-  const image = nativeImage.createFromPath(trayIconPath());
-  image.setTemplateImage(true);
+function toIconImage(buffer) {
+  // The buffer is rendered at 2x (44x44) for a 22pt menu bar icon — tag it
+  // as such so macOS treats it as a crisp retina representation, not a
+  // literal 44pt icon.
+  const image = nativeImage.createFromBuffer(buffer, { scaleFactor: 2 });
+  image.setTemplateImage(false); // full-color gauge, not a template image
   return image;
 }
 
@@ -38,86 +40,78 @@ function formatPercent(utilization) {
   return Math.round(pct);
 }
 
-function trafficLightForPercent(pct) {
-  if (pct === null) return '⚪️';
-  if (pct >= 80) return '🔴';
-  if (pct >= 50) return '🟠';
-  return '🟢';
+function tooltipForState() {
+  if (state.status === 'auth_required') return 'Overclaude — 로그인이 필요합니다';
+  if (state.status === 'error') return `Overclaude — 오류: ${state.errorMessage || '알 수 없는 오류'}`;
+  if (state.status === 'loading') return 'Overclaude — 불러오는 중...';
+  if (latestUsage) {
+    const fivePct = formatPercent(latestUsage.fiveHour.utilization);
+    const sevenPct = formatPercent(latestUsage.sevenDay.utilization);
+    return `Overclaude — 5시간 ${fivePct ?? '--'}% · 주간 ${sevenPct ?? '--'}%`;
+  }
+  return 'Overclaude — Claude usage monitor';
 }
 
-function formatResetTime(isoString) {
-  if (!isoString) return 'unknown';
-  const date = new Date(isoString);
-  if (Number.isNaN(date.getTime())) return 'unknown';
-  return date.toLocaleString(undefined, {
-    weekday: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-function updateTrayTitleAndMenu() {
+async function updateTrayIcon() {
   if (!tray) return;
 
-  if (lastError) {
-    tray.setTitle('⚠️');
-  } else if (latestUsage) {
-    const fivePct = formatPercent(latestUsage.fiveHour.utilization);
-    const dot = trafficLightForPercent(fivePct);
-    tray.setTitle(fivePct === null ? `${dot} --%` : `${dot} ${fivePct}%`);
+  let buffer;
+  if (state.status === 'auth_required' || state.status === 'error') {
+    buffer = await icon.renderErrorIcon();
+  } else if (state.status === 'loading') {
+    buffer = await icon.renderLoadingIcon();
   } else {
-    tray.setTitle('…');
+    const fivePct = formatPercent(latestUsage?.fiveHour?.utilization) ?? 0;
+    buffer = await icon.renderGaugeIcon(fivePct);
   }
 
-  tray.setContextMenu(buildMenu());
+  tray.setImage(toIconImage(buffer));
+  tray.setToolTip(tooltipForState());
+}
+
+function buildOverlayPayload() {
+  if (state.status === 'loading') return { status: 'loading' };
+  if (state.status === 'auth_required') return { status: 'auth_required' };
+  if (state.status === 'error') return { status: 'error', message: state.errorMessage };
+
+  return {
+    status: 'ok',
+    fiveHour: {
+      percent: formatPercent(latestUsage?.fiveHour?.utilization),
+      resetsAt: latestUsage?.fiveHour?.resetsAt ?? null,
+    },
+    sevenDay: {
+      percent: formatPercent(latestUsage?.sevenDay?.utilization),
+      resetsAt: latestUsage?.sevenDay?.resetsAt ?? null,
+    },
+  };
+}
+
+function pushOverlayUpdate() {
+  if (overlay.isVisible()) {
+    overlay.sendUsageUpdate(buildOverlayPayload());
+  }
+}
+
+async function applyState() {
+  await updateTrayIcon();
+  pushOverlayUpdate();
+}
+
+function setPanelPosition(position) {
+  panelPosition = position === 'top-left' ? 'top-left' : 'top-right';
+  store.savePanelPosition(panelPosition);
+  overlay.setPosition(panelPosition);
 }
 
 function buildMenu() {
   const template = [];
 
   if (!cookieHeader) {
-    template.push({ label: '로그인이 필요합니다', enabled: false });
     template.push({ label: '로그인...', click: () => triggerLogin() });
     template.push({ type: 'separator' });
     template.push({ label: '종료', role: 'quit' });
     return Menu.buildFromTemplate(template);
-  }
-
-  if (lastError) {
-    template.push({ label: `⚠️ ${lastError}`, enabled: false });
-    template.push({ type: 'separator' });
-  }
-
-  if (latestUsage) {
-    const fivePct = formatPercent(latestUsage.fiveHour.utilization);
-    const sevenPct = formatPercent(latestUsage.sevenDay.utilization);
-
-    template.push({
-      label: `5시간 사용률: ${fivePct === null ? '알 수 없음' : `${fivePct}%`}`,
-      enabled: false,
-    });
-    template.push({
-      label: `  리셋: ${formatResetTime(latestUsage.fiveHour.resetsAt)}`,
-      enabled: false,
-    });
-    template.push({ type: 'separator' });
-    template.push({
-      label: `주간 사용률: ${sevenPct === null ? '알 수 없음' : `${sevenPct}%`}`,
-      enabled: false,
-    });
-    template.push({
-      label: `  리셋: ${formatResetTime(latestUsage.sevenDay.resetsAt)}`,
-      enabled: false,
-    });
-    template.push({ type: 'separator' });
-  } else if (!lastError) {
-    template.push({ label: '사용량 불러오는 중...', enabled: false });
-    template.push({ type: 'separator' });
-  }
-
-  if (orgName) {
-    template.push({ label: `조직: ${orgName}`, enabled: false });
-    template.push({ type: 'separator' });
   }
 
   template.push({
@@ -126,6 +120,24 @@ function buildMenu() {
     enabled: !isRefreshing,
   });
   template.push({ label: '재로그인', click: () => triggerLogin() });
+  template.push({ type: 'separator' });
+  template.push({
+    label: '패널 위치',
+    submenu: [
+      {
+        label: '왼쪽 상단',
+        type: 'radio',
+        checked: panelPosition === 'top-left',
+        click: () => setPanelPosition('top-left'),
+      },
+      {
+        label: '오른쪽 상단',
+        type: 'radio',
+        checked: panelPosition === 'top-right',
+        click: () => setPanelPosition('top-right'),
+      },
+    ],
+  });
   template.push({ type: 'separator' });
   template.push({ label: '종료', role: 'quit' });
 
@@ -140,14 +152,19 @@ async function ensureOrganization() {
   }
   const orgs = await fetchOrganizations(cookieHeader);
   orgUuid = orgs[0].uuid;
-  orgName = orgs[0].name;
   store.saveOrgUuid(orgUuid);
 }
 
 async function refreshUsage() {
   if (!cookieHeader || isRefreshing) return;
   isRefreshing = true;
-  updateTrayTitleAndMenu();
+
+  // Only show the loading glyph on the very first fetch (no data yet) —
+  // subsequent polls keep the last-known gauge visible while refreshing.
+  if (!latestUsage) {
+    state.status = 'loading';
+    await applyState();
+  }
 
   try {
     if (!orgUuid) {
@@ -155,29 +172,31 @@ async function refreshUsage() {
     }
     const usage = await fetchUsage(cookieHeader, orgUuid);
     latestUsage = usage;
-    lastError = null;
+    state.status = 'ok';
+    state.errorMessage = null;
   } catch (err) {
     if (err instanceof ApiError && err.code === 'AUTH_EXPIRED') {
       await handleAuthExpired();
     } else {
-      lastError = err.message || '알 수 없는 오류';
+      state.status = 'error';
+      state.errorMessage = err.message || '알 수 없는 오류';
       console.error('[overclaude] refresh error:', err);
     }
   } finally {
     isRefreshing = false;
-    updateTrayTitleAndMenu();
+    await applyState();
   }
 }
 
 async function handleAuthExpired() {
-  lastError = '세션이 만료되었습니다. 재로그인이 필요합니다.';
+  state.status = 'auth_required';
+  state.errorMessage = null;
   cookieHeader = null;
   latestUsage = null;
   store.clearCookies();
   store.clearOrgUuid();
   orgUuid = null;
-  orgName = null;
-  updateTrayTitleAndMenu();
+  await applyState();
   await triggerLogin();
 }
 
@@ -186,15 +205,14 @@ async function triggerLogin() {
     const cookies = await collectLoginCookies();
     cookieHeader = cookies;
     store.saveCookies(cookies);
-    lastError = null;
     orgUuid = null;
-    orgName = null;
     store.clearOrgUuid();
+    latestUsage = null;
     await refreshUsage();
   } catch (err) {
-    lastError = `로그인 실패: ${err.message}`;
+    state.status = cookieHeader ? state.status : 'auth_required';
     console.error('[overclaude] login error:', err);
-    updateTrayTitleAndMenu();
+    await applyState();
   }
 }
 
@@ -208,14 +226,32 @@ function startPolling() {
 async function init() {
   app.dock.hide();
 
-  tray = new Tray(loadTrayIcon());
+  tray = new Tray(toIconImage(await icon.renderLoadingIcon()));
   tray.setToolTip('Overclaude — Claude usage monitor');
-  updateTrayTitleAndMenu();
+
+  tray.on('click', () => {
+    const visible = overlay.toggle(panelPosition);
+    store.savePanelVisible(visible);
+    if (visible) pushOverlayUpdate();
+  });
+
+  tray.on('right-click', () => {
+    tray.popUpContextMenu(buildMenu());
+  });
+
+  panelPosition = store.loadPanelPosition();
+  overlay.setPosition(panelPosition);
 
   cookieHeader = store.loadCookies();
   orgUuid = store.loadOrgUuid();
 
+  if (store.loadPanelVisible()) {
+    overlay.show(panelPosition);
+  }
+
   if (!cookieHeader) {
+    state.status = 'auth_required';
+    await applyState();
     await triggerLogin();
   } else {
     await refreshUsage();
