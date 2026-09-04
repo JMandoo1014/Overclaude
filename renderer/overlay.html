@@ -38,7 +38,7 @@
   body {
     width: 240px;
     height: 150px;
-    padding: 14px 16px;
+    padding: 26px 16px 10px;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -98,9 +98,53 @@
 
   body.status-mode .metric { display: none; }
   body.status-mode .status { display: block; }
+
+  .refresh-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--fg-dim);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+  }
+
+  .refresh-btn:hover { background: var(--track); color: var(--fg); }
+  .refresh-btn:active { transform: scale(0.92); }
+  .refresh-btn:disabled { cursor: default; }
+
+  .refresh-btn svg {
+    width: 12px;
+    height: 12px;
+    display: block;
+  }
+
+  .refresh-btn.spinning svg {
+    animation: overclaude-spin 0.9s linear infinite;
+  }
+
+  @keyframes overclaude-spin {
+    to { transform: rotate(360deg); }
+  }
 </style>
 </head>
 <body>
+  <button type="button" class="refresh-btn" id="refresh-btn" title="지금 새로고침">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="23 4 23 10 17 10"></polyline>
+      <polyline points="1 20 1 14 7 14"></polyline>
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+    </svg>
+  </button>
+
   <div class="metric" id="metric-five">
     <div class="row">
       <span class="label">5시간</span>

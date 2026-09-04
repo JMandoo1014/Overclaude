@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const { BrowserWindow, screen } = require('electron');
+const { BrowserWindow, screen, ipcMain } = require('electron');
 
 const WIDTH = 240;
 const HEIGHT = 150;
@@ -9,6 +9,16 @@ const EDGE_MARGIN = 8; // gap from the screen edge / menu bar
 
 let win = null;
 let currentPosition = 'top-right';
+let refreshHandler = null;
+
+ipcMain.on('overlay:refresh-request', () => {
+  if (refreshHandler) refreshHandler();
+});
+
+/** Registers the callback invoked when the panel's refresh button is clicked. */
+function onRefreshRequested(handler) {
+  refreshHandler = handler;
+}
 
 function computeOrigin(position) {
   const { workArea } = screen.getPrimaryDisplay();
@@ -101,4 +111,4 @@ function sendUsageUpdate(payload) {
   }
 }
 
-module.exports = { show, hide, toggle, isVisible, setPosition, sendUsageUpdate };
+module.exports = { show, hide, toggle, isVisible, setPosition, sendUsageUpdate, onRefreshRequested };

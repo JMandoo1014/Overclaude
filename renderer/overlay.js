@@ -9,7 +9,12 @@ const els = {
   sevenBar: document.getElementById('seven-bar'),
   sevenReset: document.getElementById('seven-reset'),
   status: document.getElementById('status-line'),
+  refreshBtn: document.getElementById('refresh-btn'),
 };
+
+els.refreshBtn.addEventListener('click', () => {
+  window.overclaude.requestRefresh();
+});
 
 let lastPayload = { status: 'loading' };
 
@@ -49,8 +54,15 @@ function renderMetric(pctEl, barEl, resetEl, metric) {
   resetEl.textContent = formatCountdown(metric.resetsAt);
 }
 
+function renderRefreshButton(payload) {
+  const spinning = !!payload.refreshing;
+  els.refreshBtn.classList.toggle('spinning', spinning);
+  els.refreshBtn.disabled = spinning;
+}
+
 function render() {
   const payload = lastPayload;
+  renderRefreshButton(payload);
 
   if (payload.status === 'loading') {
     els.body.classList.add('status-mode');

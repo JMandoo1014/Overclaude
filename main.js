@@ -70,12 +70,15 @@ async function updateTrayIcon() {
 }
 
 function buildOverlayPayload() {
-  if (state.status === 'loading') return { status: 'loading' };
-  if (state.status === 'auth_required') return { status: 'auth_required' };
-  if (state.status === 'error') return { status: 'error', message: state.errorMessage };
+  if (state.status === 'loading') return { status: 'loading', refreshing: isRefreshing };
+  if (state.status === 'auth_required') return { status: 'auth_required', refreshing: isRefreshing };
+  if (state.status === 'error') {
+    return { status: 'error', message: state.errorMessage, refreshing: isRefreshing };
+  }
 
   return {
     status: 'ok',
+    refreshing: isRefreshing,
     fiveHour: {
       percent: formatPercent(latestUsage?.fiveHour?.utilization),
       resetsAt: latestUsage?.fiveHour?.resetsAt ?? null,
@@ -158,6 +161,7 @@ async function ensureOrganization() {
 async function refreshUsage() {
   if (!cookieHeader || isRefreshing) return;
   isRefreshing = true;
+  pushOverlayUpdate(); // let the panel show its refresh spinner right away
 
   // Only show the loading glyph on the very first fetch (no data yet) —
   // subsequent polls keep the last-known gauge visible while refreshing.
@@ -225,6 +229,8 @@ function startPolling() {
 
 async function init() {
   app.dock.hide();
+
+  overlay.onRefreshRequested(() => refreshUsage());
 
   tray = new Tray(toIconImage(await icon.renderLoadingIcon()));
   tray.setToolTip('Overclaude — Claude usage monitor');
