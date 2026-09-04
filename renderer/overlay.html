@@ -1,0 +1,170 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline';" />
+<title>Overclaude</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --fg: rgba(0, 0, 0, 0.85);
+    --fg-dim: rgba(0, 0, 0, 0.5);
+    --track: rgba(0, 0, 0, 0.12);
+    --low: #2ecc71;
+    --mid: #f39c12;
+    --high: #e74c3c;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: rgba(255, 255, 255, 0.92);
+      --fg-dim: rgba(255, 255, 255, 0.55);
+      --track: rgba(255, 255, 255, 0.16);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    overflow: hidden;
+  }
+
+  body {
+    width: 240px;
+    height: 150px;
+    padding: 26px 16px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .metric { display: flex; flex-direction: column; gap: 4px; }
+
+  .row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fg-dim);
+    letter-spacing: 0.2px;
+  }
+
+  .value {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .bar {
+    height: 5px;
+    border-radius: 3px;
+    background: var(--track);
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    background: var(--low);
+    transition: width 0.3s ease, background-color 0.3s ease;
+  }
+
+  .reset {
+    font-size: 11px;
+    color: var(--fg-dim);
+  }
+
+  .status {
+    display: none;
+    font-size: 12px;
+    color: var(--fg);
+    text-align: center;
+    line-height: 1.4;
+    white-space: pre-line;
+  }
+
+  body.status-mode .metric { display: none; }
+  body.status-mode .status { display: block; }
+
+  .refresh-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--fg-dim);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+  }
+
+  .refresh-btn:hover { background: var(--track); color: var(--fg); }
+  .refresh-btn:active { transform: scale(0.92); }
+  .refresh-btn:disabled { cursor: default; }
+
+  .refresh-btn svg {
+    width: 12px;
+    height: 12px;
+    display: block;
+  }
+
+  .refresh-btn.spinning svg {
+    animation: overclaude-spin 0.9s linear infinite;
+  }
+
+  @keyframes overclaude-spin {
+    to { transform: rotate(360deg); }
+  }
+</style>
+</head>
+<body>
+  <button type="button" class="refresh-btn" id="refresh-btn" title="지금 새로고침">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="23 4 23 10 17 10"></polyline>
+      <polyline points="1 20 1 14 7 14"></polyline>
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+    </svg>
+  </button>
+
+  <div class="metric" id="metric-five">
+    <div class="row">
+      <span class="label">5시간</span>
+      <span class="value" id="five-pct">--%</span>
+    </div>
+    <div class="bar"><div class="bar-fill" id="five-bar"></div></div>
+    <div class="reset" id="five-reset">리셋 정보 없음</div>
+  </div>
+
+  <div class="metric" id="metric-seven">
+    <div class="row">
+      <span class="label">주간</span>
+      <span class="value" id="seven-pct">--%</span>
+    </div>
+    <div class="bar"><div class="bar-fill" id="seven-bar"></div></div>
+    <div class="reset" id="seven-reset">리셋 정보 없음</div>
+  </div>
+
+  <div class="status" id="status-line"></div>
+
+  <script src="overlay.js"></script>
+</body>
+</html>

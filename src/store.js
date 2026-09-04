@@ -6,6 +6,10 @@ const { app, safeStorage } = require('electron');
 
 const COOKIE_FILE = 'overclaude-session.enc';
 const ORG_FILE = 'overclaude-org.json';
+const SETTINGS_FILE = 'overclaude-settings.json';
+
+const DEFAULT_PANEL_POSITION = 'top-right';
+const VALID_PANEL_POSITIONS = new Set(['top-left', 'top-right']);
 
 function cookieFilePath() {
   return path.join(app.getPath('userData'), COOKIE_FILE);
@@ -13,6 +17,25 @@ function cookieFilePath() {
 
 function orgFilePath() {
   return path.join(app.getPath('userData'), ORG_FILE);
+}
+
+function settingsFilePath() {
+  return path.join(app.getPath('userData'), SETTINGS_FILE);
+}
+
+function loadSettings() {
+  const filePath = settingsFilePath();
+  if (!fs.existsSync(filePath)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8')) || {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function saveSettings(patch) {
+  const merged = { ...loadSettings(), ...patch };
+  fs.writeFileSync(settingsFilePath(), JSON.stringify(merged, null, 2));
 }
 
 /**
@@ -75,6 +98,25 @@ function clearOrgUuid() {
   }
 }
 
+function savePanelPosition(position) {
+  const value = VALID_PANEL_POSITIONS.has(position) ? position : DEFAULT_PANEL_POSITION;
+  saveSettings({ panelPosition: value });
+}
+
+function loadPanelPosition() {
+  const { panelPosition } = loadSettings();
+  return VALID_PANEL_POSITIONS.has(panelPosition) ? panelPosition : DEFAULT_PANEL_POSITION;
+}
+
+function savePanelVisible(visible) {
+  saveSettings({ panelVisible: !!visible });
+}
+
+function loadPanelVisible() {
+  const { panelVisible } = loadSettings();
+  return !!panelVisible;
+}
+
 module.exports = {
   saveCookies,
   loadCookies,
@@ -82,4 +124,8 @@ module.exports = {
   saveOrgUuid,
   loadOrgUuid,
   clearOrgUuid,
+  savePanelPosition,
+  loadPanelPosition,
+  savePanelVisible,
+  loadPanelVisible,
 };
