@@ -5,14 +5,38 @@
   "private": true,
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-builder --mac"
   },
   "author": "",
   "license": "UNLICENSED",
   "devDependencies": {
-    "electron": "^32.0.0"
+    "electron": "^32.0.0",
+    "electron-builder": "^26.15.3"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.8"
+  },
+  "build": {
+    "appId": "com.overclaude.app",
+    "productName": "Overclaude",
+    "files": [
+      "main.js",
+      "src/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "identity": null
+    }
   }
 }
