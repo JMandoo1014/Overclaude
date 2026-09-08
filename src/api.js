@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use strict';
 
 const BASE_URL = 'https://claude.ai';
