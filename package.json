@@ -9,7 +9,7 @@
     "build": "electron-builder --mac"
   },
   "author": "",
-  "license": "UNLICENSED",
+  "license": "GPL-3.0",
   "devDependencies": {
     "electron": "^32.0.0",
     "electron-builder": "^26.15.3"

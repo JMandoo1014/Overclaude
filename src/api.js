@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use strict';
 
 const BASE_URL = 'https://claude.ai';
@@ -23,9 +24,16 @@ function buildHeaders(cookieHeader) {
 async function requestJson(url, cookieHeader) {
   let res;
   try {
-    res = await fetch(url, { headers: buildHeaders(cookieHeader) });
+    res = await fetch(url, {
+      headers: buildHeaders(cookieHeader),
+      signal: AbortSignal.timeout(15000),
+    });
   } catch (err) {
-    throw new ApiError(`Network error calling ${url}: ${err.message}`, 'NETWORK');
+    // undici's fetch wraps the real reason (DNS failure, connection
+    // refused, timeout, ...) in `err.cause` and leaves `err.message` as an
+    // uninformative "fetch failed" — surface the cause instead.
+    const reason = err.name === 'TimeoutError' ? 'timed out' : err.cause?.code || err.cause?.message || err.message;
+    throw new ApiError(`Network error: ${reason}`, 'NETWORK');
   }
 
   if (res.status === 401 || res.status === 403) {
